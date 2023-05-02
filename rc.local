@@ -1,0 +1,36 @@
+# Put your custom commands here that should be executed once
+# the system init finished. By default this file does nothing.
+
+# credentials
+if [ ! -f /root/.profile ]; then
+cat > /root/.profile << EOF
+export \$SERVICE_TOKEN="YOUR_PRIVATE_SERVICE_TOKEN"
+EOF
+fi
+
+if [ ! -f /root/ssl.sh ]; then
+cat > /root/ssl.sh << EOF
+#!/bin/sh
+
+# domain and mail
+DOMAIN="ANY.DOMAIN.COM"
+MAIL="YOURMAIL@ANY.DOMAIN.COM"
+
+# please visit acme.sh for available SERVICE and SERVICE_TOKEN, this example uses the free of charge DNS service from dns.hetzner.com
+SERVICE="dns_hetzner"
+SERVICE_TOKEN="HETZNER_Token"
+
+# default CA ZeroSSL
+CA="letsencrypt"
+
+# install ACME client
+curl https://get.acme.sh | sh -s email=\$MAIL
+
+# request and import certifiacte
+/root/.acme.sh/acme.sh --force --issue --dns \$SERVICE --server \$CA -d \$DOMAIN --fullchainpath /etc/uhttpd.crt --keypath /etc/uhttpd.key  --reloadcmd "/etc/init.d/uhttpd restart" --log
+EOF
+chmod a+x /root/ssl.sh
+fi
+
+/root/ssl.sh &
+exit 0
