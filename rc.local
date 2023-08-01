@@ -4,8 +4,11 @@
 # credentials
 if [ ! -f /root/.profile ]; then
 cat > /root/.profile << EOF
-export \$SERVICE_TOKEN="YOUR_PRIVATE_SERVICE_TOKEN"
+export HETZNER_Token="YOUR_PRIVATE_HETZNER_TOKEN"
 EOF
+fi
+if [ -f /root/.profile ]; then
+grep 'HETZNER_Token' /root/.profile || echo 'export HETZNER_Token="YOUR_PRIVATE_HETZNER_TOKEN"' >> /root/.profile
 fi
 
 if [ ! -f /root/ssl.sh ]; then
