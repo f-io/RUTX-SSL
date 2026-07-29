@@ -1,44 +1,56 @@
 # Put your custom commands here that should be executed once
 # the system init finished. By default this file does nothing.
 
-# Ensure .profile exists and contains Token
-if [ ! -f /root/.profile ]; then
-  echo 'export HETZNER_Token="YOUR_PRIVATE_HETZNER_TOKEN"' > /root/.profile
-elif ! grep -q '^export HETZNER_Token=' /root/.profile; then
-  echo 'export HETZNER_Token="YOUR_PRIVATE_HETZNER_TOKEN"' >> /root/.profile
-fi
+# =====================================================================
+# SSL certificates for Teltonika RutOS / OpenWrt via acme.sh and the
+# Hetzner Cloud DNS API (dns_hetznercloud, DNS-01 challenge)
+#
+# Set your values below BEFORE the first boot. They seed
+# /root/ssl.conf exactly once - afterwards edit that file directly.
+# The script itself is downloaded from GitHub on every boot
+# (the local copy is kept when the download fails).
+# =====================================================================
 
-# SSL script creation
-if [ ! -f /root/ssl.sh ]; then
-cat > /root/ssl.sh << EOF
-#!/bin/sh
+# ------------- configuration (only used to seed the conf) ------------
+# Hetzner Cloud API token with read & write permissions
+HETZNER_TOKEN='YOUR_HETZNER_CLOUD_API_TOKEN'
+SSL_DOMAIN='ANY.DOMAIN.COM'
+ACME_MAIL='YOURMAIL@ANY.DOMAIN.COM'
+# ---------------------------------------------------------------------
 
-# Domain and email configuration
-DOMAIN="ANY.DOMAIN.COM"
-MAIL="YOURMAIL@ANY.DOMAIN.COM"
+REPO_RAW='https://raw.githubusercontent.com/f-io/RUTX-SSL/main'
 
-# DNS service for ACME
-SERVICE="dns_hetzner"
-SERVICE_TOKEN="HETZNER_Token"
-
-# Default Certificate Authority
-CA="letsencrypt"
-
-# Install ACME client if not already installed
-if [ ! -f /root/.acme.sh/acme.sh ]; then
-  curl -s https://get.acme.sh | sh -s email=\$MAIL
-fi
-
-# Request and import certificate
-/root/.acme.sh/acme.sh --force --issue --dns \$SERVICE --server \$CA -d \$DOMAIN \
-  --fullchainpath /etc/uhttpd.crt --keypath /etc/uhttpd.key \
-  --reloadcmd "/etc/init.d/uhttpd restart" --log
+# seed the config once - edit /root/ssl.conf to change it later
+if [ ! -f /root/ssl.conf ]; then
+cat > /root/ssl.conf << EOF
+HETZNER_TOKEN='${HETZNER_TOKEN}'
+SSL_DOMAIN='${SSL_DOMAIN}'
+ACME_MAIL='${ACME_MAIL}'
 EOF
-
-chmod a+x /root/ssl.sh
+chmod 600 /root/ssl.conf
 fi
 
-# Run SSL script in the background safely
-/root/ssl.sh >/dev/null 2>&1 &
+# download helper - keeps the old copy if the download fails
+fetch() {
+  curl -fsSL --connect-timeout 5 -o "/tmp/${1}.new" "${REPO_RAW}/${1}" \
+    && head -n1 "/tmp/${1}.new" | grep -q '^#!/bin/sh' \
+    && mv "/tmp/${1}.new" "/root/${1}" \
+    && chmod a+x "/root/${1}"
+}
+
+# wait for the WAN to come up if there is no local copy yet
+if [ ! -f /root/ssl.sh ]; then
+  i=0
+  while [ $i -lt 12 ]; do
+    fetch ssl.sh && break
+    i=$((i+1))
+    sleep 5
+  done
+else
+  fetch ssl.sh
+fi
+
+# issue/renew in the background
+[ -x /root/ssl.sh ] && /root/ssl.sh >/dev/null 2>&1 &
 
 exit 0
